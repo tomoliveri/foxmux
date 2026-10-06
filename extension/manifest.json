@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "foxmux",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Open a real tmux terminal in a browser tab.",
   "homepage_url": "https://github.com/tomoliveri/foxmux",
   "permissions": ["nativeMessaging", "storage"],
@@ -14,7 +14,9 @@
   },
   "commands": {
     "_execute_action": {
-      "suggested_key": { "default": "Alt+Shift+T" },
+      "suggested_key": {
+        "default": "Alt+Shift+T"
+      },
       "description": "Open a terminal tab"
     }
   },
@@ -29,7 +31,10 @@
     "gecko": {
       "id": "foxmux@foxmux",
       "strict_min_version": "128.0",
-      "data_collection_permissions": { "required": ["none"] }
+      "data_collection_permissions": {
+        "required": ["none"]
+      },
+      "update_url": "https://github.com/tomoliveri/foxmux/releases/latest/download/updates.json"
     }
   }
 }

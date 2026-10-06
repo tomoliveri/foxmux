@@ -1,2 +1,4 @@
 extension/vendor/
 dist/
+licenses/
+package-lock.json

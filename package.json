@@ -1,0 +1,29 @@
+{
+  "name": "foxmux",
+  "private": true,
+  "description": "A real tmux terminal in a Firefox tab",
+  "license": "MPL-2.0",
+  "repository": "github:tomoliveri/foxmux",
+  "type": "module",
+  "scripts": {
+    "vendor": "node scripts/vendor.js",
+    "lint": "prettier --check . && eslint . && web-ext lint --source-dir extension --self-hosted",
+    "build": "sh scripts/build.sh",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.12.0",
+    "globals": "17.13.0",
+    "prettier": "3.9.9",
+    "selenium-webdriver": "4.50.0",
+    "web-ext": "10.7.0"
+  },
+  "overrides": {
+    "shell-quote": "^1.12.0"
+  }
+}

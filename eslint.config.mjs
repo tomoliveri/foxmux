@@ -28,6 +28,10 @@ export default [
     },
   },
   {
+    files: ["scripts/**/*.js", "test/**/*.js", "eslint.config.mjs"],
+    languageOptions: { globals: globals.node },
+  },
+  {
     // Shared helpers from settings.js.
     files: ["extension/options.js", "extension/terminal.js"],
     languageOptions: {

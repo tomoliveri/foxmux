@@ -1,5 +1,8 @@
 # foxmux
 
+[![CI](https://github.com/tomoliveri/foxmux/actions/workflows/ci.yml/badge.svg)](https://github.com/tomoliveri/foxmux/actions/workflows/ci.yml)
+[![Compatibility](https://github.com/tomoliveri/foxmux/actions/workflows/compat.yml/badge.svg)](https://github.com/tomoliveri/foxmux/actions/workflows/compat.yml)
+
 A Firefox extension that opens a real [tmux](https://github.com/tmux/tmux)
 terminal in a browser tab.
 
@@ -31,40 +34,38 @@ extension (ID `foxmux@foxmux`) is allowed to talk to the host.
 
 ## Install
 
-1. Install the native host for your user:
+1. From the [latest release](https://github.com/tomoliveri/foxmux/releases/latest),
+   open `foxmux-<version>-signed.xpi` in Firefox and click _Add_. It is signed
+   by Mozilla and updates itself when new releases come out.
+2. Download `foxmux-host-<version>.tar.gz` from the same release, unpack it
+   and install the native host for your user:
 
    ```sh
    ./install.sh            # ./install.sh --uninstall to remove
    ```
 
-2. Install the extension. Release Firefox only installs signed add-ons, so
-   either:
-   - **Sign it for yourself (permanent):** create an
-     [AMO API key](https://addons.mozilla.org/developers/addon/api/key/), put
-     it in a git-ignored `.amo-credentials` file:
-     ```sh
-     AMO_JWT_ISSUER=user:12345:678
-     AMO_JWT_SECRET=...
-     ```
-     then run `scripts/sign.sh` and open the signed `.xpi` from `dist/` in
-     Firefox. Unlisted signing is private: the add-on is not published on AMO.
-   - **Load it temporarily:** open `about:debugging#/runtime/this-firefox`,
-     choose *Load Temporary Add-on…* and pick `extension/manifest.json`. It is
-     removed when Firefox restarts.
-   - **Firefox Developer Edition / Nightly / ESR:** set
-     `xpinstall.signatures.required` to `false` in `about:config`, run
-     `scripts/build.sh` and open `dist/foxmux-*.xpi`.
+   Re-run it when release notes say the native host changed.
+
+### From source
+
+```sh
+npm ci --ignore-scripts && npm run vendor
+./install.sh
+```
+
+Then open `about:debugging#/runtime/this-firefox`, choose _Load Temporary
+Add-on…_ and pick `extension/manifest.json` (removed when Firefox restarts).
 
 ## Settings
 
-Open `about:addons` → foxmux → *Preferences*:
+Open `about:addons` → foxmux → _Preferences_:
 
-| Setting | Default | Notes |
-| --- | --- | --- |
-| Start directory | `~` | `~` and `$VARS` are expanded; falls back to `~` if missing |
-| Sessions | New session per tab | Per-tab sessions are killed when the tab closes. *Shared* mode attaches every tab to one named session that survives tab closes |
-| Font size / family | 14 / Menlo… | |
-| Option as Meta | off | macOS only |
+| Setting            | Default             | Notes                                                                                                                           |
+| ------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Start directory    | `~`                 | `~` and `$VARS` are expanded; falls back to `~` if missing                                                                      |
+| Sessions           | New session per tab | Per-tab sessions are killed when the tab closes. _Shared_ mode attaches every tab to one named session that survives tab closes |
+| Font size / family | 14 / Menlo…         |                                                                                                                                 |
+| Option as Meta     | off                 | macOS only                                                                                                                      |
 
 ## Notes
 
@@ -101,16 +102,34 @@ add-ons or software already running as your user. Keep the AMO signing key in
 ## Development
 
 ```sh
-npx prettier --check .          # JS/HTML/CSS formatting (Mozilla's Prettier settings)
-npx eslint extension            # needs @eslint/js and globals installed
+npm ci --ignore-scripts        # dependencies, pinned by package-lock.json
+npm run lint                   # Prettier, ESLint, Mozilla's add-on linter
 ruff format native && ruff check native
-scripts/build.sh                # unsigned XPI in dist/
-scripts/sign.sh                 # signed XPI in dist/ (bump the version first)
+npm run build && npm test      # unsigned XPI, then end-to-end tests in Firefox
 ```
+
+`extension/vendor/` is generated from npm by `npm run vendor`. The end-to-end
+tests need tmux and the native host installed; set `FIREFOX_BIN` to choose a
+Firefox.
+
+### Automation
+
+- **CI** lints, audits shipped dependencies and runs the end-to-end tests on
+  Linux (packaged and latest tmux) and macOS for every push and pull request.
+- **Compatibility** runs weekly against Firefox release, beta, nightly and ESR
+  with tmux's latest release and development branch, and opens an issue if
+  anything breaks. It also flags new Nerd Fonts releases.
+- **Dependabot** keeps npm packages, GitHub Actions and Ruff current; patch and
+  minor updates merge automatically once CI passes.
+- **Release** signs a new version through addons.mozilla.org (unlisted) and
+  publishes it on GitHub whenever shipped files change. Installed copies pick
+  it up through `update_url`. The manifest version is the floor; otherwise the
+  patch number is bumped. Signing uses the `AMO_JWT_ISSUER` and
+  `AMO_JWT_SECRET` repository secrets.
 
 ## Reporting issues
 
-Use *Report an issue* in foxmux's preferences, or open one at
+Use _Report an issue_ in foxmux's preferences, or open one at
 <https://github.com/tomoliveri/foxmux/issues>.
 
 ## Licence

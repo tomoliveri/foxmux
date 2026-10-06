@@ -8,6 +8,7 @@
 
 set -eu
 cd "$(dirname "$0")/.."
+npm run --silent vendor
 VERSION=$(python3 -c 'import json;print(json.load(open("extension/manifest.json"))["version"])')
 OUT="dist/foxmux-$VERSION.xpi"
 STAGE=$(mktemp -d)

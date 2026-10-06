@@ -1,0 +1,120 @@
+# Signs and publishes a release whenever shipped files changed since the last
+# one. CI calls this after it passes on main. It also runs daily, because
+# merges made by automation (Dependabot auto-merge) do not trigger workflows;
+# those merges already passed CI on their pull request.
+#
+# Versioning: the version in extension/manifest.json is the floor. If it has
+# already been released, the next patch version is used instead.
+name: Release
+
+on:
+  workflow_call:
+    secrets:
+      AMO_JWT_ISSUER:
+        required: true
+      AMO_JWT_SECRET:
+        required: true
+  schedule:
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency: release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Decide version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Never release a commit whose own CI run failed. (When CI itself
+          # called this workflow, its run is still in progress.)
+          ci=$(gh run list -R "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$(git rev-parse HEAD)" \
+            --json status,conclusion --jq '.[0] | if . == null then "none" else (.conclusion // .status) end')
+          if [ "$GITHUB_EVENT_NAME" != push ] && [ "$ci" != success ] && [ "$ci" != none ]; then
+            echo "CI for this commit is '$ci'; not releasing."
+            exit 0
+          fi
+          last=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+          if [ -n "$last" ] && git diff --quiet "$last" HEAD -- extension native install.sh package-lock.json LICENSE NOTICE.md licenses; then
+            echo "Nothing shipped has changed since $last."
+            exit 0
+          fi
+          floor=$(jq -r .version extension/manifest.json)
+          next=$floor
+          if [ -n "$last" ]; then
+            next=$(echo "${last#v}" | awk -F. '{ print $1 "." $2 "." $3 + 1 }')
+            next=$(printf '%s\n%s\n' "$floor" "$next" | sort -V | tail -n 1)
+          fi
+          host_changed=true
+          if [ -n "$last" ] && git diff --quiet "$last" HEAD -- native install.sh; then
+            host_changed=false
+          fi
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "host_changed=$host_changed" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.version.outputs.version
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Sign with addons.mozilla.org
+        if: steps.version.outputs.version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          npm ci --ignore-scripts
+          jq --arg v "$VERSION" '.version = $v' extension/manifest.json > manifest.tmp
+          mv manifest.tmp extension/manifest.json
+          scripts/sign.sh
+
+      - name: Package release files
+        if: steps.version.outputs.version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          xpi="foxmux-$VERSION-signed.xpi"
+          hash=$(sha256sum "dist/$xpi" | cut -d' ' -f1)
+          jq -n --arg v "$VERSION" --arg hash "sha256:$hash" \
+            --arg link "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION/$xpi" \
+            '{addons: {"foxmux@foxmux": {updates: [{version: $v, update_link: $link, update_hash: $hash}]}}}' \
+            > dist/updates.json
+          tar -czf "dist/foxmux-host-$VERSION.tar.gz" --transform "s,^,foxmux-host-$VERSION/," \
+            install.sh native/foxmux_host.py README.md LICENSE NOTICE.md licenses
+          (cd dist && sha256sum "$xpi" "foxmux-host-$VERSION.tar.gz" > SHA256SUMS)
+
+      - name: Publish GitHub release
+        if: steps.version.outputs.version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          HOST_CHANGED: ${{ steps.version.outputs.host_changed }}
+        run: |
+          {
+            echo "Installed copies of foxmux update themselves within a day."
+            echo "New install: open the \`.xpi\` below in Firefox, then run \`./install.sh\` from the host bundle."
+            if [ "$HOST_CHANGED" = true ]; then
+              echo
+              echo "**This release changes the native host.** Re-run \`./install.sh\` from the host bundle or a checkout."
+            fi
+          } > notes.md
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" \
+            --title "foxmux $VERSION" --notes-file notes.md --generate-notes \
+            "dist/foxmux-$VERSION-signed.xpi" "dist/foxmux-host-$VERSION.tar.gz" dist/updates.json dist/SHA256SUMS

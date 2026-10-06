@@ -1,0 +1,75 @@
+# Reusable end-to-end test: one Firefox, one tmux, one OS.
+name: e2e
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        type: string
+        default: ubuntu-latest
+      firefox:
+        description: Firefox version for setup-firefox (latest, latest-beta, latest-nightly, latest-esr)
+        type: string
+        default: latest
+      tmux:
+        description: system (package manager), release (latest tag) or master
+        type: string
+        default: system
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Firefox ${{ inputs.firefox }}, tmux ${{ inputs.tmux }}, ${{ inputs.os }}
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --ignore-scripts
+
+      - name: Install tmux (package manager)
+        if: inputs.tmux == 'system'
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then brew install tmux; else sudo apt-get update -q && sudo apt-get install -yq tmux; fi
+
+      - name: Build tmux from source
+        if: inputs.tmux != 'system'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TMUX_REF: ${{ inputs.tmux }}
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq build-essential autoconf automake bison pkg-config libevent-dev libncurses-dev
+          if [ "$TMUX_REF" = release ]; then
+            TMUX_REF=$(gh api repos/tmux/tmux/releases/latest --jq .tag_name)
+          fi
+          git clone --depth 1 --branch "$TMUX_REF" https://github.com/tmux/tmux.git "$RUNNER_TEMP/tmux"
+          cd "$RUNNER_TEMP/tmux"
+          sh autogen.sh && ./configure --prefix=/usr/local && make -j"$(nproc)" && sudo make install
+
+      - uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795 # v1.7.2
+        id: firefox
+        with:
+          firefox-version: ${{ inputs.firefox }}
+
+      - name: Versions
+        env:
+          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+        run: |
+          tmux -V
+          "$FIREFOX_BIN" --version
+
+      - run: ./install.sh
+      - run: npm run build
+      - run: npm test
+        env:
+          FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
