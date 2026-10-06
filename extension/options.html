@@ -1,0 +1,78 @@
+<!doctype html>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at https://mozilla.org/MPL/2.0/. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>foxmux settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <form id="form">
+      <label>
+        Start directory
+        <input type="text" name="startDir" spellcheck="false" placeholder="~" />
+        <small
+          >Where new tmux sessions start. <code>~</code> and
+          <code>$VARS</code> are expanded.</small
+        >
+      </label>
+
+      <fieldset>
+        <legend>Sessions</legend>
+        <label class="inline">
+          <input type="radio" name="sessionMode" value="per-tab" />
+          New tmux session for each tab (closed with the tab)
+        </label>
+        <label class="inline">
+          <input type="radio" name="sessionMode" value="shared" />
+          Attach every tab to one named session (kept when tabs close)
+        </label>
+        <label>
+          Session name
+          <input
+            type="text"
+            name="sessionName"
+            spellcheck="false"
+            placeholder="main"
+          />
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Appearance</legend>
+        <label>
+          Font size
+          <input type="number" name="fontSize" min="6" max="48" />
+        </label>
+        <label>
+          Font family
+          <input type="text" name="fontFamily" spellcheck="false" />
+          <small
+            >Installed Nerd Fonts are used automatically as a fallback for
+            icons.</small
+          >
+        </label>
+        <label class="inline">
+          <input type="checkbox" name="optionIsMeta" />
+          Use Option as Meta key (macOS)
+        </label>
+      </fieldset>
+
+      <p id="status" role="status"></p>
+
+      <p>
+        <a
+          class="button"
+          href="https://github.com/tomoliveri/foxmux/issues/new"
+          target="_blank"
+          rel="noopener"
+          >Report an issue</a
+        >
+      </p>
+    </form>
+    <script src="settings.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

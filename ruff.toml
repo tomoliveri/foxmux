@@ -1,0 +1,6 @@
+target-version = "py39"
+
+[lint]
+select = ["E", "F", "W", "B", "S", "UP"]
+# S603/S607: running tmux is the point of the host.
+ignore = ["S603", "S607"]

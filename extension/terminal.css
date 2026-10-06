@@ -1,0 +1,21 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+@font-face {
+  font-family: "foxmux symbols";
+  src: url("fonts/SymbolsNerdFontMono-Regular.ttf");
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #1d1f21;
+}
+
+#terminal {
+  position: absolute;
+  inset: 6px 0 0 8px;
+}

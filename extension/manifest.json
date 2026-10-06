@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "foxmux",
+  "version": "0.1.4",
+  "description": "Open a real tmux terminal in a browser tab.",
+  "homepage_url": "https://github.com/tomoliveri/foxmux",
+  "permissions": ["nativeMessaging", "storage"],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "action": {
+    "default_title": "Open terminal tab",
+    "default_icon": "icons/foxmux.svg"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+T" },
+      "description": "Open a terminal tab"
+    }
+  },
+  "options_ui": {
+    "page": "options.html"
+  },
+  "icons": {
+    "48": "icons/foxmux.svg",
+    "96": "icons/foxmux.svg"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "foxmux@foxmux",
+      "strict_min_version": "128.0",
+      "data_collection_permissions": { "required": ["none"] }
+    }
+  }
+}
