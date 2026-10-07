@@ -22,8 +22,20 @@ jobs:
       firefox: ${{ matrix.firefox }}
       tmux: ${{ matrix.tmux }}
 
+  # Run the current setup several times over to catch flaky tests before they
+  # block a pull request.
+  flaky:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    uses: ./.github/workflows/e2e.yml
+    with:
+      os: ${{ matrix.os }}
+      repeat: 5
+
   report:
-    needs: e2e
+    needs: [e2e, flaky]
     if: failure()
     runs-on: ubuntu-latest
     permissions:

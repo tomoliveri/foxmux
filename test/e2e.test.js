@@ -26,7 +26,9 @@ function sleep(ms) {
   return new Promise(r => setTimeout(r, ms));
 }
 
-async function waitFor(what, check, timeout = 20000) {
+// Generous timeout: CI machines (especially macOS) can be slow. Waits end as
+// soon as the condition holds, so passing tests stay fast.
+async function waitFor(what, check, timeout = 45000) {
   const end = Date.now() + timeout;
   let last;
   while (Date.now() < end) {
@@ -36,7 +38,11 @@ async function waitFor(what, check, timeout = 20000) {
     }
     await sleep(250);
   }
-  throw new Error(`Timed out waiting for ${what}`);
+  // Show what the terminal displayed, to make CI failures easy to read.
+  const screen = await screenLines().catch(() => []);
+  throw new Error(
+    `Timed out waiting for ${what}. Screen:\n${screen.join("\n")}`
+  );
 }
 
 // WebDriver may not navigate to extension pages, so load them the way the
@@ -55,6 +61,16 @@ async function openPage(path) {
   );
 }
 
+// Preferences save on every keystroke, so reload the page until the stored
+// value matches rather than trusting the first "Saved" message.
+async function waitForSavedPreference(name, expected) {
+  await waitFor(`${name} to be saved`, async () => {
+    await openPage("options.html");
+    const field = await driver.findElement(By.name(name));
+    return (await field.getAttribute("value")) === expected;
+  });
+}
+
 async function screenLines() {
   const text = await driver.executeScript(
     "return document.querySelector('.xterm-rows')?.innerText ?? ''"
@@ -64,13 +80,13 @@ async function screenLines() {
 
 async function openTerminal() {
   await openPage("tmux.html");
-  // tmux's status bar shows the session name once it is up.
-  const title = await waitFor("tmux to start", async () => {
-    const t = await driver.getTitle();
+  // The tab title names the session once the host is ready, and tmux's
+  // status bar appears once the session is up.
+  return waitFor("tmux to start", async () => {
+    const session = (await driver.getTitle()).match(/^tmux — (\S+)$/)?.[1];
     const lines = await screenLines();
-    return lines.some(l => l.includes("[foxmux-")) && t;
+    return session && lines.some(l => l.includes("[foxmux-")) && session;
   });
-  return title.replace("tmux — ", "");
 }
 
 async function run(command) {
@@ -140,9 +156,7 @@ test("starts in the directory chosen in preferences", async () => {
     const field = await driver.findElement(By.name("startDir"));
     await field.clear();
     await field.sendKeys(dir);
-    await waitFor("settings to save", async () =>
-      (await driver.findElement(By.id("status")).getText()).includes("Saved")
-    );
+    await waitForSavedPreference("startDir", dir);
 
     await openTerminal();
     await run("pwd");
@@ -154,6 +168,7 @@ test("starts in the directory chosen in preferences", async () => {
     const field = await driver.findElement(By.name("startDir"));
     await field.clear();
     await field.sendKeys("~");
+    await waitForSavedPreference("startDir", "~");
     rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -189,6 +204,7 @@ test("shared mode attaches to a named session that outlives the tab", async () =
     const field = await driver.findElement(By.name("sessionName"));
     await field.clear();
     await field.sendKeys(name);
+    await waitForSavedPreference("sessionName", name);
 
     assert.equal(await openTerminal(), name);
     await driver.get("about:blank");
@@ -197,6 +213,10 @@ test("shared mode attaches to a named session that outlives the tab", async () =
   } finally {
     await openPage("options.html");
     await driver.findElement(By.css("input[value=per-tab]")).click();
+    await waitFor("per-tab mode to be saved", async () => {
+      await openPage("options.html");
+      return driver.findElement(By.css("input[value=per-tab]")).isSelected();
+    });
     execFileSync("tmux", ["kill-session", "-t", `=${name}`], {
       stdio: "ignore",
     });

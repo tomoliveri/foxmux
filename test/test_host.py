@@ -23,6 +23,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+# Generous: CI machines can be slow, and waits end as soon as they succeed.
+TIMEOUT = 30
+
 HOST = Path(__file__).resolve().parent.parent / "native" / "foxmux_host.py"
 sys.path.insert(0, str(HOST.parent))
 
@@ -136,14 +139,14 @@ class HostProcessTests(unittest.TestCase):
             process.stdin.close()
         except BrokenPipeError:
             pass
-        process.wait(timeout=10)
+        process.wait(timeout=TIMEOUT)
         process.stdout.close()
 
     def send(self, process, message):
         process.stdin.write(frame(message))
         process.stdin.flush()
 
-    def receive(self, process, until, timeout=10):
+    def receive(self, process, until, timeout=TIMEOUT):
         """Collect messages until until(messages) is true."""
         messages = []
         deadline = time.monotonic() + timeout
@@ -185,7 +188,7 @@ class HostProcessTests(unittest.TestCase):
             == 0
         )
 
-    def wait_until(self, condition, timeout=10):
+    def wait_until(self, condition, timeout=TIMEOUT):
         deadline = time.monotonic() + timeout
         while not condition():
             if time.monotonic() > deadline:
@@ -226,7 +229,7 @@ class HostProcessTests(unittest.TestCase):
         session = ready["session"]
         self.wait_until(lambda: self.session_exists(session))
         process.stdin.close()
-        process.wait(timeout=10)
+        process.wait(timeout=TIMEOUT)
         self.assertFalse(self.session_exists(session))
 
     def test_closing_the_tab_after_detaching_still_ends_the_session(self):
@@ -237,7 +240,7 @@ class HostProcessTests(unittest.TestCase):
         self.receive(process, lambda ms: any(m["type"] == "exit" for m in ms))
         self.assertTrue(self.session_exists(session), "detached, not ended")
         process.stdin.close()
-        process.wait(timeout=10)
+        process.wait(timeout=TIMEOUT)
         self.assertFalse(self.session_exists(session))
 
     def test_reconnecting_reattaches_to_the_same_session(self):
@@ -255,7 +258,7 @@ class HostProcessTests(unittest.TestCase):
         self.assertEqual(ready["session"], name)
         self.wait_until(lambda: self.session_exists(name))
         process.stdin.close()
-        process.wait(timeout=10)
+        process.wait(timeout=TIMEOUT)
         self.assertTrue(self.session_exists(name))
 
     def test_survives_malformed_and_odd_messages(self):
@@ -280,7 +283,7 @@ class HostProcessTests(unittest.TestCase):
         process.stdin.flush()
         messages = self.receive(process, lambda ms: bool(ms))
         self.assertEqual(messages[0]["code"], "protocolError")
-        self.assertEqual(process.wait(timeout=10), 0)
+        self.assertEqual(process.wait(timeout=TIMEOUT), 0)
 
     def test_reports_missing_tmux(self):
         process = self.start_host(

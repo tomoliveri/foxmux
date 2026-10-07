@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same pull request makes older runs pointless. Runs on
+# main always finish, since they may release.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -24,12 +30,12 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.x"
-      - run: npm ci --ignore-scripts
+      - run: scripts/retry.sh npm ci --ignore-scripts
       - run: npm run vendor
       - run: npm run lint
       - name: Audit shipped dependencies
         run: npm audit --omit=dev
-      - run: pip install -r requirements-dev.txt
+      - run: scripts/retry.sh pip install -r requirements-dev.txt
       - run: ruff format --check native test
       - run: ruff check native test
       - run: shellcheck install.sh scripts/*.sh

@@ -15,6 +15,10 @@ on:
         description: system (package manager), release (latest tag) or master
         type: string
         default: system
+      repeat:
+        description: Run the tests this many times, to catch flaky ones
+        type: number
+        default: 1
 
 permissions:
   contents: read
@@ -34,12 +38,17 @@ jobs:
           node-version: 24
           cache: npm
 
-      - run: npm ci --ignore-scripts
+      - run: scripts/retry.sh npm ci --ignore-scripts
 
       - name: Install tmux (package manager)
         if: inputs.tmux == 'system'
         run: |
-          if [ "$RUNNER_OS" = macOS ]; then brew install tmux; else sudo apt-get update -q && sudo apt-get install -yq tmux; fi
+          if [ "$RUNNER_OS" = macOS ]; then
+            HOMEBREW_NO_AUTO_UPDATE=1 scripts/retry.sh brew install tmux
+          else
+            scripts/retry.sh sudo apt-get update -q
+            scripts/retry.sh sudo apt-get install -yq tmux
+          fi
 
       - name: Build tmux from source
         if: inputs.tmux != 'system'
@@ -47,12 +56,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TMUX_REF: ${{ inputs.tmux }}
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -yq build-essential autoconf automake bison pkg-config libevent-dev libncurses-dev
+          scripts/retry.sh sudo apt-get update -q
+          scripts/retry.sh sudo apt-get install -yq build-essential autoconf automake bison pkg-config libevent-dev libncurses-dev
           if [ "$TMUX_REF" = release ]; then
-            TMUX_REF=$(gh api repos/tmux/tmux/releases/latest --jq .tag_name)
+            TMUX_REF=$(scripts/retry.sh gh api repos/tmux/tmux/releases/latest --jq .tag_name)
           fi
-          git clone --depth 1 --branch "$TMUX_REF" https://github.com/tmux/tmux.git "$RUNNER_TEMP/tmux"
+          scripts/retry.sh git clone --depth 1 --branch "$TMUX_REF" https://github.com/tmux/tmux.git "$RUNNER_TEMP/tmux"
           cd "$RUNNER_TEMP/tmux"
           sh autogen.sh && ./configure --prefix=/usr/local && make -j"$(nproc)" && sudo make install
 
@@ -69,10 +78,13 @@ jobs:
           "$FIREFOX_BIN" --version
 
       - run: ./install.sh
-      - name: Unit and host tests
-        run: npm test
       - run: npm run build
+      - name: Unit and host tests
+        env:
+          REPEAT: ${{ inputs.repeat }}
+        run: for _ in $(seq "$REPEAT"); do npm test; done
       - name: End-to-end tests
-        run: npm run test:e2e
         env:
           FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}
+          REPEAT: ${{ inputs.repeat }}
+        run: for _ in $(seq "$REPEAT"); do npm run test:e2e; done
