@@ -140,7 +140,7 @@ software already running as you. Found a vulnerability? Please
 
 ```sh
 npm ci --ignore-scripts             # dependencies, pinned by package-lock.json
-npm run lint                        # Prettier, ESLint (Mozilla's rules), Mozilla's add-on linter
+npm run lint                        # Prettier, ESLint, Mozilla's add-on linter
 ruff format native test && ruff check native test
 npm test                            # unit tests, plus host tests against real tmux
 npm run build && npm run test:e2e   # end-to-end tests in a real Firefox
