@@ -5,32 +5,29 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>foxmux settings</title>
+    <title data-l10n-id="optionsTitle"></title>
     <link rel="stylesheet" href="options.css" />
   </head>
   <body>
     <form id="form">
       <label>
-        Start directory
+        <span data-l10n-id="optStartDir"></span>
         <input type="text" name="startDir" spellcheck="false" placeholder="~" />
-        <small
-          >Where new tmux sessions start. <code>~</code> and
-          <code>$VARS</code> are expanded.</small
-        >
+        <small data-l10n-id="optStartDirHelp"></small>
       </label>
 
       <fieldset>
-        <legend>Sessions</legend>
+        <legend data-l10n-id="optSessions"></legend>
         <label class="inline">
           <input type="radio" name="sessionMode" value="per-tab" />
-          New tmux session for each tab (closed with the tab)
+          <span data-l10n-id="optPerTab"></span>
         </label>
         <label class="inline">
           <input type="radio" name="sessionMode" value="shared" />
-          Attach every tab to one named session (kept when tabs close)
+          <span data-l10n-id="optShared"></span>
         </label>
         <label>
-          Session name
+          <span data-l10n-id="optSessionName"></span>
           <input
             type="text"
             name="sessionName"
@@ -41,22 +38,19 @@
       </fieldset>
 
       <fieldset>
-        <legend>Appearance</legend>
+        <legend data-l10n-id="optAppearance"></legend>
         <label>
-          Font size
+          <span data-l10n-id="optFontSize"></span>
           <input type="number" name="fontSize" min="6" max="48" />
         </label>
         <label>
-          Font family
+          <span data-l10n-id="optFontFamily"></span>
           <input type="text" name="fontFamily" spellcheck="false" />
-          <small
-            >Installed Nerd Fonts are used automatically as a fallback for
-            icons.</small
-          >
+          <small data-l10n-id="optFontHelp"></small>
         </label>
         <label class="inline">
           <input type="checkbox" name="optionIsMeta" />
-          Use Option as Meta key (macOS)
+          <span data-l10n-id="optOptionIsMeta"></span>
         </label>
       </fieldset>
 
@@ -68,10 +62,11 @@
           href="https://github.com/tomoliveri/foxmux/issues/new"
           target="_blank"
           rel="noopener"
-          >Report an issue</a
-        >
+          data-l10n-id="optReportIssue"
+        ></a>
       </p>
     </form>
+    <script src="localize.js"></script>
     <script src="settings.js"></script>
     <script src="options.js"></script>
   </body>

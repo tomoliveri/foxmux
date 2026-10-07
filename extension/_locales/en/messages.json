@@ -1,0 +1,60 @@
+{
+  "extensionName": { "message": "foxmux" },
+  "extensionDescription": {
+    "message": "Open a real tmux terminal in a browser tab."
+  },
+  "actionTitle": { "message": "Open terminal tab" },
+  "commandOpen": { "message": "Open a terminal tab" },
+
+  "terminalTitle": {
+    "message": "tmux — $SESSION$",
+    "placeholders": { "session": { "content": "$1" } }
+  },
+  "tmuxExited": { "message": "[tmux exited — press Enter to reconnect]" },
+  "hostUnreachable": {
+    "message": "foxmux could not reach its native host. Install it from https://github.com/tomoliveri/foxmux/releases/latest (run ./install.sh), then press Enter to retry."
+  },
+  "hostOutdated": {
+    "message": "The foxmux native host is out of date. Re-run ./install.sh from https://github.com/tomoliveri/foxmux/releases/latest, then press Enter."
+  },
+  "addonOutdated": {
+    "message": "The foxmux native host is newer than this add-on. Update foxmux in about:addons, then press Enter."
+  },
+  "tmuxMissing": {
+    "message": "tmux is not installed. Install it (for example with brew install tmux), then press Enter."
+  },
+  "startDirMissing": {
+    "message": "Start directory $REQUESTED$ not found, using $HOME$.",
+    "placeholders": {
+      "requested": { "content": "$1" },
+      "home": { "content": "$2" }
+    }
+  },
+  "badMessage": { "message": "foxmux ignored a malformed message." },
+  "protocolError": {
+    "message": "The foxmux native host stopped after a corrupt message. Press Enter to restart it."
+  },
+
+  "optionsTitle": { "message": "foxmux settings" },
+  "optStartDir": { "message": "Start directory" },
+  "optStartDirHelp": {
+    "message": "Where new tmux sessions start. ~ and $$VARS are expanded."
+  },
+  "optSessions": { "message": "Sessions" },
+  "optPerTab": {
+    "message": "New tmux session for each tab (closed with the tab)"
+  },
+  "optShared": {
+    "message": "Attach every tab to one named session (kept when tabs close)"
+  },
+  "optSessionName": { "message": "Session name" },
+  "optAppearance": { "message": "Appearance" },
+  "optFontSize": { "message": "Font size" },
+  "optFontFamily": { "message": "Font family" },
+  "optFontHelp": {
+    "message": "Icons (eza, starship, powerline…) come from a bundled Nerd Fonts symbols font."
+  },
+  "optOptionIsMeta": { "message": "Use Option as Meta key (macOS)" },
+  "optSaved": { "message": "Saved. Applies to new terminal tabs." },
+  "optReportIssue": { "message": "Report an issue" }
+}

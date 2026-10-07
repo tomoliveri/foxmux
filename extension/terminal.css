@@ -4,7 +4,7 @@
 
 @font-face {
   font-family: "foxmux symbols";
-  src: url("fonts/SymbolsNerdFontMono-Regular.ttf");
+  src: url("fonts/SymbolsNerdFontMono-Regular.woff2") format("woff2");
 }
 
 html,

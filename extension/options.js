@@ -31,7 +31,7 @@ async function init() {
 
   form.addEventListener("input", async () => {
     await browser.storage.local.set(readForm());
-    statusLine.textContent = "Saved. Applies to new terminal tabs.";
+    statusLine.textContent = browser.i18n.getMessage("optSaved");
   });
 }
 

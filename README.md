@@ -103,14 +103,18 @@ add-ons or software already running as your user. Keep the AMO signing key in
 
 ```sh
 npm ci --ignore-scripts        # dependencies, pinned by package-lock.json
-npm run lint                   # Prettier, ESLint, Mozilla's add-on linter
-ruff format native && ruff check native
-npm run build && npm test      # unsigned XPI, then end-to-end tests in Firefox
+npm run lint                   # Prettier, ESLint (Mozilla's rules), Mozilla's add-on linter
+ruff format native test && ruff check native test
+npm test                       # unit tests, plus host tests against real tmux
+npm run build && npm run test:e2e   # end-to-end tests in a real Firefox
 ```
 
-`extension/vendor/` is generated from npm by `npm run vendor`. The end-to-end
-tests need tmux and the native host installed; set `FIREFOX_BIN` to choose a
-Firefox.
+`extension/vendor/` is generated from npm by `npm run vendor`. The host and
+end-to-end tests need tmux; the end-to-end tests also need the native host
+installed (`./install.sh`). Set `FIREFOX_BIN` to choose a Firefox.
+
+User-facing text lives in `extension/_locales/`; the native host sends message
+codes, not text, so everything shown in the tab can be translated.
 
 ### Automation
 
@@ -122,10 +126,14 @@ Firefox.
 - **Dependabot** keeps npm packages, GitHub Actions and Ruff current; patch and
   minor updates merge automatically once CI passes.
 - **Release** signs a new version through addons.mozilla.org (unlisted) and
-  publishes it on GitHub whenever shipped files change. Installed copies pick
-  it up through `update_url`. The manifest version is the floor; otherwise the
-  patch number is bumped. Signing uses the `AMO_JWT_ISSUER` and
-  `AMO_JWT_SECRET` repository secrets.
+  publishes it on GitHub whenever shipped files change, then installed copies
+  pick it up through `update_url`. `scripts/release-version.sh` picks the
+  number: the next patch version, or the manifest's version if you raised it
+  for a bigger release. The release commits that version to `main`, so each tag
+  holds exactly what shipped. Signing uses the `AMO_JWT_ISSUER` and
+  `AMO_JWT_SECRET` repository secrets; the version commit uses the
+  `RELEASE_DEPLOY_KEY` deploy key, the only actor besides admins that may push
+  to `main` without the CI check.
 
 ## Reporting issues
 

@@ -19,13 +19,16 @@ foxmux alongside them has the terms to hand.
 
 ## Software bundled in the extension
 
-| Project                                                                                                                | Version | Licence                                                                                              | Text                                                                   |
-| ---------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| [xterm.js](https://github.com/xtermjs/xterm.js) (`@xterm/xterm`)                                                       | 6.0.0   | MIT                                                                                                  | [`licenses/xterm.js-MIT.txt`](licenses/xterm.js-MIT.txt)               |
-| `@xterm/addon-fit`                                                                                                     | 0.11.0  | MIT                                                                                                  | [`licenses/xterm-addon-fit-MIT.txt`](licenses/xterm-addon-fit-MIT.txt) |
-| [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts) Symbols Only (`extension/fonts/SymbolsNerdFontMono-Regular.ttf`) | 3.4.0   | MIT; bundled icon sets under their own licences (CC BY 4.0, Apache-2.0, SIL OFL 1.1, MIT, Unlicense) | [`licenses/nerd-fonts-symbols/`](licenses/nerd-fonts-symbols/)         |
+| Project                                                                                                                  | Version | Licence                                                                                              | Text                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [xterm.js](https://github.com/xtermjs/xterm.js) (`@xterm/xterm`)                                                         | 6.0.0   | MIT                                                                                                  | [`licenses/xterm.js-MIT.txt`](licenses/xterm.js-MIT.txt)               |
+| `@xterm/addon-fit`                                                                                                       | 0.11.0  | MIT                                                                                                  | [`licenses/xterm-addon-fit-MIT.txt`](licenses/xterm-addon-fit-MIT.txt) |
+| [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts) Symbols Only (`extension/fonts/SymbolsNerdFontMono-Regular.woff2`) | 3.4.0   | MIT; bundled icon sets under their own licences (CC BY 4.0, Apache-2.0, SIL OFL 1.1, MIT, Unlicense) | [`licenses/nerd-fonts-symbols/`](licenses/nerd-fonts-symbols/)         |
 
-The font is the unmodified release file. Its glyphs come from Codicons, Devicons,
+The font is the release file `SymbolsNerdFontMono-Regular.ttf` repackaged
+losslessly as WOFF2 (fontTools, no added metadata): glyphs, names and all
+other font data are unchanged, meeting the conditions the SIL OFL FAQ (2.2)
+sets for repackaging without renaming. Its glyphs come from Codicons, Devicons,
 Font Awesome, Font Awesome Extension, Font Logos, IEC Power Symbols, Material
 Design Icons, Seti-UI, Octicons, Pomicons, Powerline Symbols, Powerline Extra
 Symbols and Weather Icons; `license-audit.md` from Nerd Fonts lists which

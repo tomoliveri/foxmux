@@ -69,7 +69,10 @@ jobs:
           "$FIREFOX_BIN" --version
 
       - run: ./install.sh
+      - name: Unit and host tests
+        run: npm test
       - run: npm run build
-      - run: npm test
+      - name: End-to-end tests
+        run: npm run test:e2e
         env:
           FIREFOX_BIN: ${{ steps.firefox.outputs.firefox-path }}

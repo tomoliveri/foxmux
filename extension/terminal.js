@@ -6,28 +6,21 @@
 
 // Must match the "name" in the native host manifest written by install.sh.
 const HOST_NAME = "foxmux";
+// Must match PROTOCOL in native/foxmux_host.py.
+const PROTOCOL = 1;
+
+const COLOR_WARNING = "33";
+const COLOR_ERROR = "31";
+const COLOR_HINT = "90";
 
 function base64ToBytes(b64) {
   return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
 }
 
-// Terminal output is untrusted, so only ever open plain web links from it.
-function openLink(event, uri) {
-  let url;
-  try {
-    url = new URL(uri);
-  } catch {
-    return;
-  }
-  if (url.protocol === "http:" || url.protocol === "https:") {
-    browser.tabs.create({ url: url.href });
-  }
-}
-
 async function main() {
   const settings = await loadSettings();
   // Load the icon font up front so xterm.js measures cells with it in place.
-  await document.fonts.load('16px "foxmux symbols"', "\ue5ff");
+  await document.fonts.load('16px "foxmux symbols"', "");
   const container = document.getElementById("terminal");
 
   const term = new Terminal({
@@ -45,84 +38,102 @@ async function main() {
   fitAddon.fit();
   term.focus();
 
+  // One native host serves the tab for its whole life. While tmux runs,
+  // keystrokes go to it; otherwise Enter (re)starts it.
   let port = null;
-  let connected = false;
-  let session = settings.sessionMode === "shared" ? settings.sessionName : "";
+  let running = false;
+  let hostExplained = false; // the host already said why it is stopping
+  let session = "";
 
-  function showMessage(text, color = "33") {
+  function show(messageName, color, args = []) {
+    const text = browser.i18n.getMessage(messageName, args) || messageName;
     term.write(`\r\n\x1b[${color}m${text}\x1b[0m\r\n`);
   }
 
-  function send(message) {
-    if (connected) {
+  function setTitle(title) {
+    document.title =
+      title || browser.i18n.getMessage("terminalTitle", session || "…");
+  }
+
+  function sendToTmux(message) {
+    if (running) {
       port.postMessage(message);
     }
   }
 
-  function connect() {
+  function onHostMessage(message) {
+    switch (message.type) {
+      case "ready":
+        if (message.protocol !== PROTOCOL) {
+          // Hosts from before the protocol check send no number at all.
+          const hostIsOlder = !(message.protocol > PROTOCOL);
+          show(hostIsOlder ? "hostOutdated" : "addonOutdated", COLOR_ERROR);
+          port.disconnect();
+          port = null;
+          return;
+        }
+        running = true;
+        session = message.session;
+        setTitle();
+        break;
+      case "output":
+        term.write(base64ToBytes(message.data));
+        break;
+      case "notice":
+        show(message.code, COLOR_WARNING, message.args);
+        break;
+      case "error":
+        hostExplained = true;
+        show(message.code, COLOR_ERROR, message.args);
+        break;
+      case "exit":
+        running = false;
+        show("tmuxExited", COLOR_HINT);
+        break;
+    }
+  }
+
+  function onHostGone() {
+    running = false;
+    port = null;
+    if (!hostExplained) {
+      show("hostUnreachable", COLOR_ERROR);
+    }
+    hostExplained = false;
+  }
+
+  function start() {
     term.reset();
-    port = browser.runtime.connectNative(HOST_NAME);
-    connected = true;
-    let finished = false;
-
-    port.onMessage.addListener(message => {
-      switch (message.type) {
-        case "ready":
-          // Remember the name so reconnecting reattaches to the same session.
-          session = message.session;
-          document.title = `tmux — ${session}`;
-          break;
-        case "output":
-          term.write(base64ToBytes(message.data));
-          break;
-        case "notice":
-          showMessage(message.message);
-          break;
-        case "error":
-          finished = true;
-          showMessage(message.message, "31");
-          break;
-        case "exit":
-          finished = true;
-          showMessage("[tmux exited — press Enter to reconnect]", "90");
-          break;
-      }
-    });
-
-    port.onDisconnect.addListener(() => {
-      connected = false;
-      if (!finished) {
-        showMessage("foxmux could not reach its native host.", "31");
-        showMessage("Run ./install.sh, then press Enter to retry.", "90");
-      }
-    });
-
+    if (!port) {
+      port = browser.runtime.connectNative(HOST_NAME);
+      port.onMessage.addListener(onHostMessage);
+      port.onDisconnect.addListener(onHostGone);
+    }
     port.postMessage({
       type: "open",
       cwd: settings.startDir,
       cols: term.cols,
       rows: term.rows,
-      session,
+      session: settings.sessionMode === "shared" ? settings.sessionName : "",
       persist: settings.sessionMode === "shared",
     });
   }
 
   term.onData(data => {
-    if (connected) {
-      send({ type: "input", data });
+    if (running) {
+      sendToTmux({ type: "input", data });
     } else if (data === "\r") {
-      connect();
+      start();
     }
   });
   // Some mouse reports arrive as raw bytes rather than text.
-  term.onBinary(data => send({ type: "input", data, binary: true }));
-  term.onResize(({ cols, rows }) => send({ type: "resize", cols, rows }));
-  term.onTitleChange(title => {
-    document.title = title || `tmux — ${session}`;
-  });
+  term.onBinary(data => sendToTmux({ type: "input", data, binary: true }));
+  term.onResize(({ cols, rows }) => sendToTmux({ type: "resize", cols, rows }));
+  term.onTitleChange(setTitle);
   new ResizeObserver(() => fitAddon.fit()).observe(container);
 
-  connect();
+  setTitle();
+  start();
 }
 
 main();

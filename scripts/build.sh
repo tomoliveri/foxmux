@@ -18,6 +18,6 @@ mkdir -p dist
 cp -R extension/. "$STAGE/"
 cp LICENSE NOTICE.md "$STAGE/"
 cp -R licenses "$STAGE/licenses"
-rm -f "$OUT"
+rm -f dist/foxmux-*[0-9].xpi
 (cd "$STAGE" && zip -qr -X "$OLDPWD/$OUT" . -x '.*')
 echo "$OUT"

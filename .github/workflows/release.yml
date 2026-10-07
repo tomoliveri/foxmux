@@ -1,10 +1,11 @@
 # Signs and publishes a release whenever shipped files changed since the last
-# one. CI calls this after it passes on main. It also runs weekly, because
-# merges made by automation (Dependabot auto-merge) do not trigger workflows;
-# those merges already passed CI on their pull request.
+# one (see scripts/release-version.sh). CI calls this after it passes on main.
+# It also runs weekly, because merges made by automation (Dependabot
+# auto-merge) do not trigger workflows; those merges passed CI on their PR.
 #
-# Versioning: the version in extension/manifest.json is the floor. If it has
-# already been released, the next patch version is used instead.
+# The release commits its version to extension/manifest.json on main, so the
+# code at each tag says exactly what shipped. That push uses a deploy key
+# (RELEASE_DEPLOY_KEY), the only actor allowed to skip the required CI check.
 name: Release
 
 on:
@@ -14,6 +15,8 @@ on:
         required: true
       AMO_JWT_SECRET:
         required: true
+      RELEASE_DEPLOY_KEY:
+        required: true
   schedule:
     - cron: "41 4 * * 2" # Tuesdays, after Monday's Dependabot updates
   workflow_dispatch:
@@ -21,12 +24,13 @@ on:
 permissions:
   contents: read
 
-concurrency: release
-
 jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    concurrency:
+      group: release
+      cancel-in-progress: false
     permissions:
       contents: write
       actions: read
@@ -49,23 +53,42 @@ jobs:
             echo "CI for this commit is '$ci'; not releasing."
             exit 0
           fi
-          last=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
-          if [ -n "$last" ] && git diff --quiet "$last" HEAD -- extension native install.sh package-lock.json LICENSE NOTICE.md licenses; then
-            echo "Nothing shipped has changed since $last."
+          version=$(scripts/release-version.sh)
+          if [ -z "$version" ]; then
+            echo "Nothing shipped has changed since the last release."
             exit 0
           fi
-          floor=$(jq -r .version extension/manifest.json)
-          next=$floor
-          if [ -n "$last" ]; then
-            next=$(echo "${last#v}" | awk -F. '{ print $1 "." $2 "." $3 + 1 }')
-            next=$(printf '%s\n%s\n' "$floor" "$next" | sort -V | tail -n 1)
-          fi
+          last=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
           host_changed=true
           if [ -n "$last" ] && git diff --quiet "$last" HEAD -- native install.sh; then
             host_changed=false
           fi
-          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "host_changed=$host_changed" >> "$GITHUB_OUTPUT"
+
+      # Done before installing any npm packages, so no third-party code ever
+      # runs while the deploy key is on disk.
+      - name: Commit the version to main
+        if: steps.version.outputs.version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          DEPLOY_KEY: ${{ secrets.RELEASE_DEPLOY_KEY }}
+        run: |
+          sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$VERSION\",/" extension/manifest.json
+          if git diff --quiet; then
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -am "Release $VERSION"
+          key="$RUNNER_TEMP/deploy_key"
+          known_hosts="$RUNNER_TEMP/known_hosts"
+          trap 'rm -f "$key" "$known_hosts"' EXIT
+          (umask 077 && printf '%s\n' "$DEPLOY_KEY" > "$key")
+          # GitHub's published host key (https://api.github.com/meta).
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$known_hosts"
+          GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o UserKnownHostsFile=$known_hosts" \
+            git push "git@github.com:$GITHUB_REPOSITORY.git" HEAD:main
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         if: steps.version.outputs.version
@@ -76,13 +99,10 @@ jobs:
       - name: Sign with addons.mozilla.org
         if: steps.version.outputs.version
         env:
-          VERSION: ${{ steps.version.outputs.version }}
           AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
           AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
         run: |
           npm ci --ignore-scripts
-          jq --arg v "$VERSION" '.version = $v' extension/manifest.json > manifest.tmp
-          mv manifest.tmp extension/manifest.json
           scripts/sign.sh
 
       - name: Package release files

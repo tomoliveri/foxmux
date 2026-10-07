@@ -30,8 +30,8 @@ jobs:
       - name: Audit shipped dependencies
         run: npm audit --omit=dev
       - run: pip install -r requirements-dev.txt
-      - run: ruff format --check native
-      - run: ruff check native
+      - run: ruff format --check native test
+      - run: ruff check native test
       - run: shellcheck install.sh scripts/*.sh
 
   e2e:
@@ -66,3 +66,4 @@ jobs:
     secrets:
       AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
       AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+      RELEASE_DEPLOY_KEY: ${{ secrets.RELEASE_DEPLOY_KEY }}

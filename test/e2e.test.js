@@ -5,10 +5,11 @@
 // End-to-end test: installs the extension in a real Firefox, opens a terminal
 // tab and drives tmux through it. Needs tmux, the native host (./install.sh)
 // and an unsigned build (npm run build). Set FIREFOX_BIN to pick a Firefox.
+// Run with: npm run test:e2e
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, before, test } from "node:test";
@@ -89,8 +90,9 @@ function sessionExists(name) {
 }
 
 before(async () => {
-  const xpi = readdirSync("dist").find(f => /^foxmux-[\d.]+\.xpi$/.test(f));
-  assert.ok(xpi, "run `npm run build` first");
+  const { version } = JSON.parse(readFileSync("extension/manifest.json"));
+  const xpi = resolve("dist", `foxmux-${version}.xpi`);
+  assert.ok(existsSync(xpi), "run `npm run build` first");
 
   const options = new firefox.Options()
     .addArguments("-headless")
@@ -108,7 +110,7 @@ before(async () => {
       new firefox.ServiceBuilder().addArguments("--allow-system-access")
     )
     .build();
-  await driver.installAddon(resolve("dist", xpi), true);
+  await driver.installAddon(xpi, true);
 });
 
 after(async () => {
@@ -161,4 +163,50 @@ test("closing the tab ends its tmux session", async () => {
   assert.ok(sessionExists(session), `${session} should be running`);
   await driver.get("about:blank");
   await waitFor("session to end", () => !sessionExists(session));
+});
+
+test("pressing Enter after tmux exits starts it again", async () => {
+  await openTerminal();
+  await run("exit");
+  await waitFor("exit notice", async () =>
+    (await screenLines()).some(l => l.includes("tmux exited"))
+  );
+  await run("");
+  await waitFor("tmux to restart", async () => {
+    const lines = await screenLines();
+    return (
+      lines.some(l => l.includes("[foxmux-")) &&
+      !lines.some(l => l.includes("tmux exited"))
+    );
+  });
+});
+
+test("shared mode attaches to a named session that outlives the tab", async () => {
+  const name = `foxmux-e2e-${process.pid}`;
+  try {
+    await openPage("options.html");
+    await driver.findElement(By.css("input[value=shared]")).click();
+    const field = await driver.findElement(By.name("sessionName"));
+    await field.clear();
+    await field.sendKeys(name);
+
+    assert.equal(await openTerminal(), name);
+    await driver.get("about:blank");
+    await sleep(1000);
+    assert.ok(sessionExists(name), "shared session should survive the tab");
+  } finally {
+    await openPage("options.html");
+    await driver.findElement(By.css("input[value=per-tab]")).click();
+    execFileSync("tmux", ["kill-session", "-t", `=${name}`], {
+      stdio: "ignore",
+    });
+  }
+});
+
+test("the preferences page is localised", async () => {
+  await openPage("options.html");
+  const legend = await driver.findElement(By.css("legend")).getText();
+  assert.equal(legend, "Sessions");
+  const link = await driver.findElement(By.css("a.button")).getText();
+  assert.equal(link, "Report an issue");
 });
