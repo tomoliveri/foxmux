@@ -141,7 +141,7 @@ software already running as you. Found a vulnerability? Please
 ```sh
 npm ci --ignore-scripts             # dependencies, pinned by package-lock.json
 npm run lint                        # Prettier, ESLint, Mozilla's add-on linter
-ruff format native test && ruff check native test
+ruff format native scripts test && ruff check native scripts test
 npm test                            # unit tests, plus host tests against real tmux
 npm run build && npm run test:e2e   # end-to-end tests in a real Firefox
 ```
@@ -162,9 +162,13 @@ codes rather than text, so everything shown in the tab can be translated.
   machines.
 - **Compatibility** runs weekly against Firefox release, beta, nightly and ESR
   with tmux's latest release and development branch. It also repeats the whole
-  suite five times to catch flaky tests, flags new Nerd Fonts releases, and
-  opens an issue if anything breaks.
-- **Dependabot** keeps npm packages, GitHub Actions and Ruff current. Patch and
+  suite five times to catch flaky tests, and opens an issue if anything breaks.
+- **Nerd Fonts** isn't on npm, so the weekly run updates the bundled symbols font
+  itself: it verifies the download's SHA-256 digest, repackages it losslessly
+  (`scripts/woff2.py`), refreshes the licence files and opens a pull request
+  that merges once CI passes. If the licences that apply to the font changed,
+  it asks for a review instead.
+- **Dependabot** keeps npm packages, GitHub Actions and the Python tools current. Patch and
   minor updates merge automatically once CI passes, after a three-day cooldown.
 - **Release** signs a new version through addons.mozilla.org (unlisted) and
   publishes it on GitHub whenever shipped files change; installed copies pick it

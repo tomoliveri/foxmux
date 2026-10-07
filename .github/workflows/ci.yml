@@ -36,8 +36,8 @@ jobs:
       - name: Audit shipped dependencies
         run: npm audit --omit=dev
       - run: scripts/retry.sh pip install -r requirements-dev.txt
-      - run: ruff format --check native test
-      - run: ruff check native test
+      - run: ruff format --check native scripts test
+      - run: ruff check native scripts test
       - run: shellcheck install.sh scripts/*.sh
 
   e2e:
