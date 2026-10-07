@@ -253,6 +253,7 @@ class HostProcessTests(unittest.TestCase):
         process = self.start_host()
         ready, _ = self.ready(process, session=name, persist=True)
         self.assertEqual(ready["session"], name)
+        self.wait_until(lambda: self.session_exists(name))
         process.stdin.close()
         process.wait(timeout=10)
         self.assertTrue(self.session_exists(name))
