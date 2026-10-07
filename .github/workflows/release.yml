@@ -1,5 +1,5 @@
 # Signs and publishes a release whenever shipped files changed since the last
-# one. CI calls this after it passes on main. It also runs daily, because
+# one. CI calls this after it passes on main. It also runs weekly, because
 # merges made by automation (Dependabot auto-merge) do not trigger workflows;
 # those merges already passed CI on their pull request.
 #
@@ -15,7 +15,7 @@ on:
       AMO_JWT_SECRET:
         required: true
   schedule:
-    - cron: "41 4 * * *"
+    - cron: "41 4 * * 2" # Tuesdays, after Monday's Dependabot updates
   workflow_dispatch:
 
 permissions:
