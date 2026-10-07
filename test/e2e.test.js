@@ -28,26 +28,38 @@ function sleep(ms) {
 
 // Generous timeout: CI machines (especially macOS) can be slow. Waits end as
 // soon as the condition holds, so passing tests stay fast.
+// A check that throws (say, an element not there yet) counts as "not yet".
 async function waitFor(what, check, timeout = 45000) {
   const end = Date.now() + timeout;
-  let last;
+  let lastError;
   while (Date.now() < end) {
-    last = await check();
-    if (last) {
-      return last;
+    try {
+      const result = await check();
+      if (result) {
+        return result;
+      }
+    } catch (error) {
+      lastError = error;
     }
     await sleep(250);
   }
   // Show what the terminal displayed, to make CI failures easy to read.
   const screen = await screenLines().catch(() => []);
   throw new Error(
-    `Timed out waiting for ${what}. Screen:\n${screen.join("\n")}`
+    `Timed out waiting for ${what}.` +
+      (lastError ? ` Last error: ${lastError.message}.` : "") +
+      ` Screen:\n${screen.join("\n")}`
   );
 }
 
 // WebDriver may not navigate to extension pages, so load them the way the
 // browser UI would, from privileged chrome code.
 async function openPage(path) {
+  // Mark the current page so we can tell when a fresh one has replaced it,
+  // even when reloading the same address.
+  await driver
+    .executeScript("document.documentElement.toggleAttribute('data-old', true)")
+    .catch(() => {});
   await driver.setContext(firefox.Context.CHROME);
   await driver.executeScript(
     `gBrowser.selectedBrowser.fixupAndLoadURIString(arguments[0], {
@@ -56,9 +68,17 @@ async function openPage(path) {
     `${BASE}/${path}`
   );
   await driver.setContext(firefox.Context.CONTENT);
-  await waitFor(path, async () =>
-    (await driver.getCurrentUrl()).endsWith(path)
-  );
+  await waitFor(`${path} to load`, async () => {
+    if (!(await driver.getCurrentUrl()).endsWith(path)) {
+      return false;
+    }
+    return driver.executeScript(
+      `return document.readyState === "complete" &&
+         !document.documentElement.hasAttribute("data-old") &&
+         (!location.pathname.endsWith("options.html") ||
+          document.documentElement.hasAttribute("data-loaded"))`
+    );
+  });
 }
 
 // Preferences save on every keystroke, so reload the page until the stored
@@ -92,6 +112,16 @@ async function openTerminal() {
 async function run(command) {
   const input = await driver.findElement(By.css(".xterm-helper-textarea"));
   await input.sendKeys(command, Key.ENTER);
+}
+
+function killSession(name) {
+  try {
+    execFileSync("tmux", ["kill-session", "-t", `=${name}`], {
+      stdio: "ignore",
+    });
+  } catch {
+    // Already gone.
+  }
 }
 
 function sessionExists(name) {
@@ -217,9 +247,7 @@ test("shared mode attaches to a named session that outlives the tab", async () =
       await openPage("options.html");
       return driver.findElement(By.css("input[value=per-tab]")).isSelected();
     });
-    execFileSync("tmux", ["kill-session", "-t", `=${name}`], {
-      stdio: "ignore",
-    });
+    killSession(name);
   }
 });
 

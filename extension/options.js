@@ -33,6 +33,8 @@ async function init() {
     await browser.storage.local.set(readForm());
     statusLine.textContent = browser.i18n.getMessage("optSaved");
   });
+  // Lets automated tests know the fields show the saved values.
+  document.documentElement.toggleAttribute("data-loaded", true);
 }
 
 init();
