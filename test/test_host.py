@@ -32,6 +32,21 @@ sys.path.insert(0, str(HOST.parent))
 import foxmux_host as host  # noqa: E402
 
 
+def setUpModule():
+    # Run every test against a private tmux server, started fresh, so tests
+    # never touch the user's own sessions and behave the same as on CI.
+    # (The system temp dir keeps the socket path within Unix's length limit.)
+    global TMUX_TMPDIR
+    TMUX_TMPDIR = tempfile.mkdtemp(prefix="foxmux-tmux-")
+    os.environ["TMUX_TMPDIR"] = TMUX_TMPDIR
+
+
+def tearDownModule():
+    subprocess.run(["tmux", "kill-server"], stderr=subprocess.DEVNULL)
+    shutil.rmtree(TMUX_TMPDIR, ignore_errors=True)
+    del os.environ["TMUX_TMPDIR"]
+
+
 def frame(message):
     data = json.dumps(message).encode() if isinstance(message, dict) else message
     return struct.pack("=I", len(data)) + data
@@ -120,6 +135,9 @@ class MessageReaderTests(unittest.TestCase):
 class HostProcessTests(unittest.TestCase):
     """Runs the host as Firefox would and drives it over its pipes."""
 
+    def setUp(self):
+        self.unread = {}  # bytes read past the last message, per host
+
     def start_host(self, *, code=None):
         args = [sys.executable, str(HOST)]
         if code:
@@ -128,7 +146,11 @@ class HostProcessTests(unittest.TestCase):
             args,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            env={"PATH": "/usr/bin:/bin", "HOME": str(Path.home())},
+            env={
+                "PATH": "/usr/bin:/bin",
+                "HOME": str(Path.home()),
+                "TMUX_TMPDIR": os.environ["TMUX_TMPDIR"],
+            },
             cwd=HOST.parent,
         )
         self.addCleanup(self.stop_host, process)
@@ -147,20 +169,33 @@ class HostProcessTests(unittest.TestCase):
         process.stdin.flush()
 
     def receive(self, process, until, timeout=TIMEOUT):
-        """Collect messages until until(messages) is true."""
+        """Collect messages until until(messages) is true.
+
+        Reads the pipe directly with our own buffer: select() can't see data
+        already held in Python's buffered reader, so mixing the two loses
+        messages that arrive in the same write.
+        """
+        buffer = self.unread.pop(process.pid, b"")
         messages = []
         deadline = time.monotonic() + timeout
         while not until(messages):
+            if len(buffer) >= 4:
+                (length,) = struct.unpack("=I", buffer[:4])
+                if len(buffer) >= 4 + length:
+                    messages.append(json.loads(buffer[4 : 4 + length]))
+                    buffer = buffer[4 + length :]
+                    continue
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 self.fail(f"timed out; got {messages}")
-            if not select.select([process.stdout], [], [], remaining)[0]:
+            fd = process.stdout.fileno()
+            if not select.select([fd], [], [], remaining)[0]:
                 continue
-            header = process.stdout.read(4)
-            if not header:
+            chunk = os.read(fd, 65536)
+            if not chunk:
                 break
-            (length,) = struct.unpack("=I", header)
-            messages.append(json.loads(process.stdout.read(length)))
+            buffer += chunk
+        self.unread[process.pid] = buffer
         return messages
 
     def screen(self, messages):
@@ -284,6 +319,48 @@ class HostProcessTests(unittest.TestCase):
         messages = self.receive(process, lambda ms: bool(ms))
         self.assertEqual(messages[0]["code"], "protocolError")
         self.assertEqual(process.wait(timeout=TIMEOUT), 0)
+
+    def test_reports_the_exit_code_of_tmux(self):
+        fake_tmux = Path(tempfile.mkdtemp()) / "tmux"
+        self.addCleanup(shutil.rmtree, fake_tmux.parent)
+        fake_tmux.write_text("#!/bin/sh\necho bye\nexit 3\n")
+        fake_tmux.chmod(0o755)
+        process = self.start_host(
+            code="import foxmux_host as h; "
+            f"h.find_tmux = lambda env: {str(fake_tmux)!r}; h.main()"
+        )
+        self.send(process, {"type": "open"})
+        messages = self.receive(
+            process, lambda ms: any(m["type"] == "exit" for m in ms)
+        )
+        self.assertIn({"type": "exit", "code": 3}, messages)
+        self.assertIn("bye", self.screen(messages))
+
+    def test_receive_sees_messages_that_arrive_together(self):
+        # Regression test for this file's own helper: two messages in one
+        # write used to leave the second stuck in a buffer select() can't see.
+        writer = (
+            "import json, struct, sys, time\n"
+            "def frame(m):\n"
+            "    d = json.dumps(m).encode()\n"
+            "    return struct.pack('=I', len(d)) + d\n"
+            "sys.stdout.buffer.write(frame({'type': 'output', 'data': ''})"
+            " + frame({'type': 'exit', 'code': 0}))\n"
+            "sys.stdout.flush()\n"
+            "time.sleep(10)\n"
+        )
+        process = subprocess.Popen(
+            [sys.executable, "-c", writer],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+        )
+        self.addCleanup(process.stdout.close)
+        self.addCleanup(process.wait)
+        self.addCleanup(process.kill)
+        messages = self.receive(
+            process, lambda ms: any(m["type"] == "exit" for m in ms), timeout=5
+        )
+        self.assertEqual([m["type"] for m in messages], ["output", "exit"])
 
     def test_reports_missing_tmux(self):
         process = self.start_host(
