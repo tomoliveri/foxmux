@@ -1,0 +1,28 @@
+# Temporary experiment: why can't the workflow token create release v0.2.3?
+# Removed after it has run once.
+name: Release probe
+
+on: workflow_dispatch
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          for target in 3582476 e3799ea c3954df 172e8a1; do
+            sha=$(gh api "repos/$REPO/commits/$target" --jq .sha)
+            tag="probe-$target"
+            if gh release create "$tag" -R "$REPO" --target "$sha" --prerelease --title probe --notes probe >/dev/null 2>err; then
+              echo "RESULT $target: OK"
+              gh release delete "$tag" -R "$REPO" --yes --cleanup-tag
+            else
+              echo "RESULT $target: FAILED $(cat err)"
+            fi
+          done
