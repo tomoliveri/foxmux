@@ -53,35 +53,56 @@ jobs:
             echo "CI for this commit is '$ci'; not releasing."
             exit 0
           fi
-          version=$(scripts/release-version.sh)
+          last=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+          resume=false
+          if [ -n "$last" ] && ! gh release view "$last" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # An earlier run tagged this version but stopped before publishing
+            # it. Finish that release from the tagged files (keeping today's
+            # scripts, which may be newer than the tag's).
+            version=${last#v}
+            resume=true
+            previous=$(git tag --list 'v*' --sort=-v:refname | sed -n 2p)
+            release_ref=$last
+            git checkout -q "$last" -- extension native install.sh package.json package-lock.json \
+              LICENSE NOTICE.md README.md licenses
+          else
+            version=$(scripts/release-version.sh)
+            previous=$last
+            release_ref=HEAD
+          fi
           if [ -z "$version" ]; then
             echo "Nothing shipped has changed since the last release."
             exit 0
           fi
-          last=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
           host_changed=true
-          if [ -n "$last" ] && git diff --quiet "$last" HEAD -- native install.sh; then
+          if [ -n "$previous" ] && git diff --quiet "$previous" "$release_ref" -- native install.sh; then
             host_changed=false
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "host_changed=$host_changed" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$version"
+            echo "resume=$resume"
+            echo "host_changed=$host_changed"
+          } >> "$GITHUB_OUTPUT"
 
-      # Done before installing any npm packages, so no third-party code ever
-      # runs while the deploy key is on disk.
-      - name: Commit the version to main
+      # Commits the version and pushes it together with the release tag, in
+      # one atomic push with the deploy key: the workflow token may not create
+      # tags on unsigned commits. Done before installing any npm packages, so
+      # no third-party code ever runs while the deploy key is on disk.
+      - name: Commit and tag the version
         id: commit
-        if: steps.version.outputs.version
+        if: steps.version.outputs.version && steps.version.outputs.resume != 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
           DEPLOY_KEY: ${{ secrets.RELEASE_DEPLOY_KEY }}
         run: |
           sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$VERSION\",/" extension/manifest.json
-          if git diff --quiet; then
-            exit 0
+          base=$(git rev-parse HEAD)
+          if ! git diff --quiet; then
+            git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -am "Release $VERSION"
           fi
-          git -c user.name="github-actions[bot]" \
-            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -am "Release $VERSION"
+          git tag "v$VERSION"
           key="$RUNNER_TEMP/deploy_key"
           known_hosts="$RUNNER_TEMP/known_hosts"
           trap 'rm -f "$key" "$known_hosts"' EXIT
@@ -89,10 +110,11 @@ jobs:
           # GitHub's published host key (https://api.github.com/meta).
           echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > "$known_hosts"
           if ! GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o UserKnownHostsFile=$known_hosts" \
-            scripts/retry.sh git push "git@github.com:$GITHUB_REPOSITORY.git" HEAD:main; then
+            scripts/retry.sh git push --atomic "git@github.com:$GITHUB_REPOSITORY.git" \
+            HEAD:refs/heads/main "refs/tags/v$VERSION"; then
             # Usually main moved on while this ran; that newer commit's own
             # CI run releases everything, so step aside rather than fail.
-            if [ "$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main | cut -f1)" != "$(git rev-parse HEAD~1)" ]; then
+            if [ "$(git ls-remote "https://github.com/$GITHUB_REPOSITORY.git" refs/heads/main | cut -f1)" != "$base" ]; then
               echo "::notice::main moved on; its own CI run will release it."
               echo "skip=true" >> "$GITHUB_OUTPUT"
               exit 0
@@ -109,11 +131,21 @@ jobs:
       - name: Sign with addons.mozilla.org
         if: steps.version.outputs.version && steps.commit.outputs.skip != 'true'
         env:
+          VERSION: ${{ steps.version.outputs.version }}
           AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
           AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
         run: |
+          set -o pipefail # so a failed signing isn't hidden by tee
           scripts/retry.sh npm ci --ignore-scripts
-          scripts/sign.sh
+          mkdir -p dist
+          if ! scripts/sign.sh 2>&1 | tee "$RUNNER_TEMP/sign.log"; then
+            if ! grep -q "already exists" "$RUNNER_TEMP/sign.log"; then
+              exit 1
+            fi
+            # An earlier run got this version signed but stopped before
+            # publishing it; fetch the file AMO already signed.
+            scripts/retry.sh python3 scripts/amo_download.py "$VERSION" "dist/foxmux-$VERSION-signed.xpi"
+          fi
 
       - name: Package release files
         if: steps.version.outputs.version && steps.commit.outputs.skip != 'true'
@@ -145,6 +177,6 @@ jobs:
               echo "**This release changes the native host.** Re-run \`./install.sh\` from the host bundle or a checkout."
             fi
           } > notes.md
-          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" \
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --verify-tag \
             --title "foxmux $VERSION" --notes-file notes.md --generate-notes \
             "dist/foxmux-$VERSION-signed.xpi" "dist/foxmux-host-$VERSION.tar.gz" dist/updates.json dist/SHA256SUMS

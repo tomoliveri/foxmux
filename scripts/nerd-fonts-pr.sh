@@ -73,21 +73,25 @@ To let the weekly run do this itself, turn on *Settings → Actions → General 
   exit 0
 fi
 
-# GitHub holds CI on pull requests that workflows open until someone
-# approves it, and only that run counts for the merge check. Approve it.
+# GitHub holds every workflow run on a pull request a workflow opened until
+# someone approves it, and only CI's pull_request run counts for the merge
+# check. Approve the held runs on this branch, then wait for CI to start.
 approved=false
+failed=false
 attempt=0
 while [ "$attempt" -lt "${CI_WAIT_ATTEMPTS:-30}" ]; do
-  held=$(gh run list --branch "$branch" --workflow ci.yml --event pull_request \
+  for held in $(gh run list --branch "$branch" --event pull_request \
     --json databaseId,conclusion \
-    --jq '.[] | select(.conclusion == "action_required") | .databaseId' | head -n 1)
-  if [ -n "$held" ]; then
-    gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$held/approve" >/dev/null && approved=true
+    --jq '.[] | select(.conclusion == "action_required") | .databaseId'); do
+    gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$held/approve" >/dev/null || failed=true
+  done
+  if [ "$failed" = true ]; then
     break
   fi
-  if [ "$(gh run list --branch "$branch" --workflow ci.yml --event pull_request \
-    --json databaseId --jq length)" != 0 ]; then
-    approved=true # CI started without needing approval
+  started=$(gh run list --branch "$branch" --workflow ci.yml --event pull_request \
+    --json conclusion --jq '[.[] | select(.conclusion != "action_required")] | length')
+  if [ "$started" != 0 ]; then
+    approved=true
     break
   fi
   attempt=$((attempt + 1))

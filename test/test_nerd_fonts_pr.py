@@ -27,7 +27,7 @@ FAKE_GH = textwrap.dedent(
     echo "gh $*" >> "$CALLS"
     scenario=$(cat "$FAKE_GITHUB")
     field() {
-      echo "$scenario" |
+      printf '%s' "$scenario" |
         python3 -c "import json,sys; print(json.load(sys.stdin).get('$1', ''))"
     }
     case "$1 $2" in
@@ -40,8 +40,8 @@ FAKE_GH = textwrap.dedent(
         if [ "$(field create_error)" ]; then field create_error >&2; exit 1; fi ;;
       "run list")
         case "$*" in
-          *length*) field ci_runs ;;
-          *) field held_run ;;
+          *ci.yml*) field ci_runs ;; # CI runs that have started
+          *) field held_run ;; # runs waiting for approval
         esac ;;
       "api -X")
         if [ "$(field approve_error)" ]; then field approve_error >&2; exit 1; fi ;;
@@ -181,6 +181,15 @@ class NerdFontsPullRequestTests(unittest.TestCase):
         result, calls = self.run_script({"open_issue_numbers": "5"})
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(any(c.startswith("gh issue close 5") for c in calls))
+
+    def test_approves_every_held_run_on_the_branch(self):
+        # CI and the Dependabot auto-merge workflow are both held.
+        result, calls = self.run_script({"held_run": "123\n456"})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for run in ("123", "456"):
+            self.assertIn(
+                f"gh api -X POST repos/owner/foxmux/actions/runs/{run}/approve", calls
+            )
 
     def test_does_not_approve_when_ci_already_started(self):
         result, calls = self.run_script({"held_run": ""})
