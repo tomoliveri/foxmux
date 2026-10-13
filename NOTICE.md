@@ -23,7 +23,7 @@ foxmux alongside them has the terms to hand.
 | ------------------------------------------------------------------------------------------------------------------------ | ------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | [xterm.js](https://github.com/xtermjs/xterm.js) (`@xterm/xterm`)                                                         | 6.0.0   | MIT                                                                                                  | [`licenses/xterm.js-MIT.txt`](licenses/xterm.js-MIT.txt)               |
 | `@xterm/addon-fit`                                                                                                       | 0.11.0  | MIT                                                                                                  | [`licenses/xterm-addon-fit-MIT.txt`](licenses/xterm-addon-fit-MIT.txt) |
-| [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts) Symbols Only (`extension/fonts/SymbolsNerdFontMono-Regular.woff2`) | 3.4.0   | MIT; bundled icon sets under their own licences (CC BY 4.0, Apache-2.0, SIL OFL 1.1, MIT, Unlicense) | [`licenses/nerd-fonts-symbols/`](licenses/nerd-fonts-symbols/)         |
+| [Nerd Fonts](https://github.com/ryanoasis/nerd-fonts) Symbols Only (`extension/fonts/SymbolsNerdFontMono-Regular.woff2`) | 3.5.1   | MIT; bundled icon sets under their own licences (CC BY 4.0, Apache-2.0, SIL OFL 1.1, MIT, Unlicense) | [`licenses/nerd-fonts-symbols/`](licenses/nerd-fonts-symbols/)         |
 
 The font is the release file `SymbolsNerdFontMono-Regular.ttf` repackaged
 losslessly as WOFF2 (fontTools, no added metadata): glyphs, names and all
