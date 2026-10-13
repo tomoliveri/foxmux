@@ -4,7 +4,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 #
 # Opens the pull request for a font update made by update_nerd_fonts.py,
-# starts CI on it and enables auto-merge. Safe to run again: it reuses or
+# approves the CI run GitHub holds on it and enables auto-merge. Safe to run again: it reuses or
 # repairs whatever an earlier, interrupted run left behind, and closes pull
 # requests for older font versions.
 #
@@ -73,12 +73,35 @@ To let the weekly run do this itself, turn on *Settings → Actions → General 
   exit 0
 fi
 
-# Pull requests opened with GITHUB_TOKEN don't start CI by themselves; a
-# dispatched run does, and its result counts for the merge check.
-gh workflow run ci.yml --ref "$branch"
-if [ "$REVIEW" = true ]; then
+# GitHub holds CI on pull requests that workflows open until someone
+# approves it, and only that run counts for the merge check. Approve it.
+approved=false
+attempt=0
+while [ "$attempt" -lt "${CI_WAIT_ATTEMPTS:-30}" ]; do
+  held=$(gh run list --branch "$branch" --workflow ci.yml --event pull_request \
+    --json databaseId,conclusion \
+    --jq '.[] | select(.conclusion == "action_required") | .databaseId' | head -n 1)
+  if [ -n "$held" ]; then
+    gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$held/approve" >/dev/null && approved=true
+    break
+  fi
+  if [ "$(gh run list --branch "$branch" --workflow ci.yml --event pull_request \
+    --json databaseId --jq length)" != 0 ]; then
+    approved=true # CI started without needing approval
+    break
+  fi
+  attempt=$((attempt + 1))
+  if [ "$attempt" -lt "${CI_WAIT_ATTEMPTS:-30}" ]; then sleep 10; fi
+done
+
+if [ "$approved" != true ]; then
+  echo "::warning::Could not start CI on the font pull request; asked for review."
+  gh pr comment "$branch" --body "CI didn't start on its own. Open the **Checks** tab and click **Approve and run workflows**; this pull request merges once CI passes."
   gh pr edit "$branch" --add-reviewer "$GITHUB_REPOSITORY_OWNER"
-else
+elif [ "$REVIEW" = true ]; then
+  gh pr edit "$branch" --add-reviewer "$GITHUB_REPOSITORY_OWNER"
+fi
+if [ "$REVIEW" != true ]; then
   gh pr merge "$branch" --auto --squash
 fi
 

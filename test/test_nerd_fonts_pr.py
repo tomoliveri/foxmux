@@ -38,6 +38,13 @@ FAKE_GH = textwrap.dedent(
         esac ;;
       "pr create")
         if [ "$(field create_error)" ]; then field create_error >&2; exit 1; fi ;;
+      "run list")
+        case "$*" in
+          *length*) field ci_runs ;;
+          *) field held_run ;;
+        esac ;;
+      "api -X")
+        if [ "$(field approve_error)" ]; then field approve_error >&2; exit 1; fi ;;
       "issue list")
         case "$*" in
           *length*) field open_issues ;;
@@ -94,6 +101,7 @@ class NerdFontsPullRequestTests(unittest.TestCase):
             "RUNNER_TEMP": str(self.tmp),
             "VERSION": "3.5.1",
             "REVIEW": "false",
+            "CI_WAIT_ATTEMPTS": "1",
         }
 
     def git(self, *args):
@@ -101,7 +109,15 @@ class NerdFontsPullRequestTests(unittest.TestCase):
 
     def run_script(self, github=None, **env):
         (self.tmp / "github.json").write_text(
-            json.dumps({"open_for_branch": "0", "open_issues": "0", **(github or {})})
+            json.dumps(
+                {
+                    "open_for_branch": "0",
+                    "open_issues": "0",
+                    "held_run": "123",  # GitHub holds CI for approval
+                    "ci_runs": "1",
+                    **(github or {}),
+                }
+            )
         )
         result = subprocess.run(
             ["sh", "scripts/nerd-fonts-pr.sh"],
@@ -112,14 +128,16 @@ class NerdFontsPullRequestTests(unittest.TestCase):
         )
         return result, self.calls.read_text().splitlines()
 
-    def test_opens_a_pull_request_runs_ci_and_auto_merges(self):
+    def test_opens_a_pull_request_approves_ci_and_auto_merges(self):
         result, calls = self.run_script()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(any(c.startswith("git push --force") for c in calls))
         self.assertTrue(
             any("refs/heads/automation/nerd-fonts-3.5.1" in c for c in calls)
         )
-        self.assertIn("gh workflow run ci.yml --ref automation/nerd-fonts-3.5.1", calls)
+        self.assertIn(
+            "gh api -X POST repos/owner/foxmux/actions/runs/123/approve", calls
+        )
         self.assertIn("gh pr merge automation/nerd-fonts-3.5.1 --auto --squash", calls)
 
     def test_asks_for_review_when_licences_changed(self):
@@ -151,7 +169,7 @@ class NerdFontsPullRequestTests(unittest.TestCase):
         result, calls = self.run_script({"create_error": error})
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(any(c.startswith("gh issue create") for c in calls))
-        self.assertFalse(any(c.startswith("gh workflow run") for c in calls))
+        self.assertFalse(any(c.startswith("gh api -X POST") for c in calls))
 
     def test_does_not_duplicate_the_fallback_issue(self):
         error = "GitHub Actions is not permitted to create or approve pull requests"
@@ -163,6 +181,26 @@ class NerdFontsPullRequestTests(unittest.TestCase):
         result, calls = self.run_script({"open_issue_numbers": "5"})
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(any(c.startswith("gh issue close 5") for c in calls))
+
+    def test_does_not_approve_when_ci_already_started(self):
+        result, calls = self.run_script({"held_run": ""})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(any(c.startswith("gh api -X POST") for c in calls))
+        self.assertIn("gh pr merge automation/nerd-fonts-3.5.1 --auto --squash", calls)
+
+    def assert_asked_for_help(self, github):
+        result, calls = self.run_script(github)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(any(c.startswith("gh pr comment") for c in calls))
+        self.assertIn(
+            "gh pr edit automation/nerd-fonts-3.5.1 --add-reviewer owner", calls
+        )
+
+    def test_asks_for_help_when_approval_fails(self):
+        self.assert_asked_for_help({"approve_error": "HTTP 403"})
+
+    def test_asks_for_help_when_ci_never_appears(self):
+        self.assert_asked_for_help({"held_run": "", "ci_runs": "0"})
 
     def test_other_errors_fail_loudly(self):
         result, _ = self.run_script({"create_error": "HTTP 502: Bad Gateway"})

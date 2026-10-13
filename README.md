@@ -165,12 +165,14 @@ codes rather than text, so everything shown in the tab can be translated.
   suite five times to catch flaky tests, and opens an issue if anything breaks.
 - **Nerd Fonts** isn't on npm, so the weekly run updates the bundled symbols font
   itself: it verifies the download's SHA-256 digest, repackages it losslessly
-  (`scripts/woff2.py`), refreshes the licence files and opens a pull request
-  that merges once CI passes. If the licences that apply to the font changed,
-  it asks for a review instead. Reruns pick up where an interrupted run left
-  off, and if GitHub won't let the workflow open the pull request, it opens an
-  issue with a one-click link instead. This needs _Settings → Actions →
-  General → Allow GitHub Actions to create and approve pull requests_.
+  (`scripts/woff2.py`), refreshes the licence files and opens a pull request.
+  GitHub holds CI on pull requests that workflows open, so the run approves
+  that CI run, and the pull request merges once CI passes. If the licences that
+  apply to the font changed, it asks for a review instead. Reruns pick up where
+  an interrupted run left off; if GitHub won't let the workflow open the pull
+  request, it opens an issue with a one-click link instead. This needs
+  _Settings → Actions → General → Allow GitHub Actions to create and approve
+  pull requests_.
 - **Dependabot** keeps npm packages, GitHub Actions and the Python tools current. Patch and
   minor updates merge automatically once CI passes, after a three-day cooldown.
 - **Release** signs a new version through addons.mozilla.org (unlisted) and

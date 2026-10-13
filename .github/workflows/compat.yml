@@ -54,9 +54,9 @@ jobs:
           fi
 
   # Nerd Fonts isn't on npm, so Dependabot can't track it. When a new release
-  # is out, this opens a pull request with the updated font, runs CI on it,
-  # and lets it merge once CI passes. If the licences that apply to the font
-  # changed, it asks for a review instead of merging.
+  # is out, this opens a pull request with the updated font, approves the CI
+  # run GitHub holds on it, and lets it merge once CI passes. If the licences
+  # that apply to the font changed, it asks for a review instead of merging.
   nerd-fonts:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -66,7 +66,7 @@ jobs:
     permissions:
       contents: write # push the update branch
       pull-requests: write # open and auto-merge the pull request
-      actions: write # start CI on the branch
+      actions: write # approve the CI run GitHub holds on the pull request
       issues: write # fall back to an issue if pull requests are blocked
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -101,7 +101,7 @@ jobs:
             echo "review=$review"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Open a pull request and run CI on it
+      - name: Open a pull request and start CI on it
         if: steps.update.outputs.version
         env:
           GH_TOKEN: ${{ github.token }}
