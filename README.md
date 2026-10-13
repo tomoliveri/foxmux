@@ -167,7 +167,10 @@ codes rather than text, so everything shown in the tab can be translated.
   itself: it verifies the download's SHA-256 digest, repackages it losslessly
   (`scripts/woff2.py`), refreshes the licence files and opens a pull request
   that merges once CI passes. If the licences that apply to the font changed,
-  it asks for a review instead.
+  it asks for a review instead. Reruns pick up where an interrupted run left
+  off, and if GitHub won't let the workflow open the pull request, it opens an
+  issue with a one-click link instead. This needs _Settings → Actions →
+  General → Allow GitHub Actions to create and approve pull requests_.
 - **Dependabot** keeps npm packages, GitHub Actions and the Python tools current. Patch and
   minor updates merge automatically once CI passes, after a three-day cooldown.
 - **Release** signs a new version through addons.mozilla.org (unlisted) and
