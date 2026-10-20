@@ -78,6 +78,39 @@ class HelperTests(unittest.TestCase):
         for requested in ("", "  ", None, ["/usr"]):
             self.assertEqual(host.start_directory(requested), (str(Path.home()), None))
 
+    def test_start_server_leaves_private_sockets_to_tmux(self):
+        with mock.patch.object(host.subprocess, "run") as run:
+            host.start_server("tmux", {"TMUX_TMPDIR": TMUX_TMPDIR})
+        run.assert_not_called()
+
+    def test_start_server_falls_back_when_the_agent_is_missing(self):
+        results = iter([1, 113])  # no server, then launchctl: no such agent
+        with (
+            mock.patch.object(host.sys, "platform", "darwin"),
+            mock.patch.object(
+                host.subprocess,
+                "run",
+                side_effect=lambda *a, **k: mock.Mock(returncode=next(results)),
+            ) as run,
+        ):
+            host.start_server("tmux", {})
+        self.assertEqual(run.call_count, 2)
+
+    def test_serve_waits_for_an_older_server_to_exit(self):
+        results = iter([0, 0, 1])
+        with (
+            mock.patch.object(
+                host.subprocess,
+                "run",
+                side_effect=lambda *a, **k: mock.Mock(returncode=next(results)),
+            ),
+            mock.patch.object(host.time, "sleep") as sleep,
+            mock.patch.object(host.os, "execve") as execve,
+        ):
+            host.serve("/bin/tmux", {})
+        self.assertEqual(sleep.call_count, 2)
+        execve.assert_called_once_with("/bin/tmux", ["/bin/tmux", "-u", "-D"], {})
+
     def test_clamp_rejects_bad_numbers(self):
         self.assertEqual(host.clamp("abc", 80, 1, 1000), 80)
         self.assertEqual(host.clamp(None, 24, 1, 1000), 24)

@@ -27,7 +27,17 @@ case "$(uname -s)" in
     ;;
 esac
 
+# macOS: run the tmux server from launchd, outside Firefox's process tree, so
+# files written in a terminal tab aren't quarantined (see LAUNCH_AGENT in the host).
+AGENT=foxmux.tmux-server
+AGENT_PLIST="$HOME/Library/LaunchAgents/$AGENT.plist"
+DOMAIN="gui/$(id -u)"
+
 if [ "${1:-}" = "--uninstall" ]; then
+  if [ "$(uname -s)" = Darwin ]; then
+    launchctl bootout "$DOMAIN/$AGENT" 2>/dev/null || true
+    rm -f "$AGENT_PLIST"
+  fi
   rm -f "$MANIFEST_DIR/$HOST_NAME.json" "$DATA_DIR/foxmux_host.py"
   rmdir "$DATA_DIR" 2>/dev/null || true
   echo "foxmux native host removed."
@@ -60,6 +70,31 @@ cat > "$MANIFEST_DIR/$HOST_NAME.json" <<JSON
 }
 JSON
 
+if [ "$(uname -s)" = Darwin ]; then
+  mkdir -p "$(dirname "$AGENT_PLIST")"
+  cat > "$AGENT_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$AGENT</string>
+  <key>ProgramArguments</key>
+  <array><string>$PYTHON</string><string>$HOST</string><string>--server</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
+</dict>
+</plist>
+PLIST
+  # Written from a foxmux tab before this fix, the plist is quarantined and launchd refuses it.
+  xattr -d com.apple.quarantine "$AGENT_PLIST" 2>/dev/null || true
+  # Reloading a running agent would end every tmux session; changes apply at next login.
+  launchctl print "$DOMAIN/$AGENT" >/dev/null 2>&1 || launchctl bootstrap "$DOMAIN" "$AGENT_PLIST"
+fi
+
 echo "foxmux native host installed:"
 echo "  host:     $HOST"
 echo "  manifest: $MANIFEST_DIR/$HOST_NAME.json"
+if [ "$(uname -s)" = Darwin ]; then
+  echo "  tmux server agent: $AGENT_PLIST"
+fi

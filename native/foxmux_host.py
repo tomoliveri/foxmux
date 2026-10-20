@@ -41,7 +41,9 @@ import shutil
 import signal
 import struct
 import subprocess
+import sys
 import termios
+import time
 
 # Bump when a change to the messages above would break the other side.
 PROTOCOL = 1
@@ -49,6 +51,12 @@ PROTOCOL = 1
 # Firefox starts native hosts with a minimal PATH, so also look where package
 # managers usually put tmux.
 EXTRA_PATH = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"]
+
+# macOS: Firefox marks the processes it starts, and everything they start, so
+# that files they write are quarantined; programs built in a terminal tab would
+# then trip Gatekeeper. install.sh adds this launchd agent, which runs the tmux
+# server outside Firefox's process tree, and the host starts it before attaching.
+LAUNCH_AGENT = "foxmux.tmux-server"
 
 # Large enough for any paste; anything bigger means the stream is corrupt.
 MAX_MESSAGE = 64 * 1024 * 1024
@@ -221,6 +229,48 @@ def attach(tmux, env, session, request, reader):
     return os.waitstatus_to_exitcode(status)
 
 
+def server_running(tmux, env):
+    return (
+        subprocess.run(
+            [tmux, "-N", "list-sessions"],
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    )
+
+
+def start_server(tmux, env):
+    """On macOS, have launchd start the tmux server if it isn't running.
+
+    Without the agent (or on a private socket) tmux starts its own server.
+    """
+    if sys.platform != "darwin" or "TMUX_TMPDIR" in env or server_running(tmux, env):
+        return
+    target = f"gui/{os.getuid()}/{LAUNCH_AGENT}"
+    started = subprocess.run(
+        ["/bin/launchctl", "kickstart", target],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    deadline = time.monotonic() + 5
+    while started.returncode == 0 and time.monotonic() < deadline:
+        if server_running(tmux, env):
+            return
+        time.sleep(0.1)
+
+
+def serve(tmux, env):
+    """Run by the launchd agent: the tmux server, in the foreground.
+
+    A server that is already running keeps the socket until it exits.
+    """
+    while server_running(tmux, env):
+        time.sleep(1)
+    os.execve(tmux, [tmux, "-u", "-D"], env)  # noqa: S606
+
+
 def kill_session(tmux, env, session):
     subprocess.run(
         [tmux, "kill-session", "-t", "=" + session],
@@ -253,6 +303,7 @@ def main():
             if session is None:
                 session = session_name(request.get("session"))
                 persist = bool(request.get("persist"))
+            start_server(tmux, env)
             code = attach(tmux, env, session, request, reader)
             send({"type": "exit", "code": code})
     except TabClosed:
@@ -267,6 +318,9 @@ def main():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--server"]:
+        environment = tmux_environment()
+        serve(find_tmux(environment), environment)
     try:
         main()
     except BrokenPipeError:

@@ -115,6 +115,12 @@ flowchart LR
   [xterm.js](https://xtermjs.org/) and sends your keystrokes to the host.
 - **The native host** (`native/foxmux_host.py`) runs `tmux new-session -A` in a
   pseudo-terminal, relays bytes both ways, and lives exactly as long as the tab.
+- **On macOS**, `install.sh` also adds a launchd agent (`foxmux.tmux-server`)
+  that runs the tmux server, and the host starts it before attaching. Firefox
+  marks everything it starts so that files they write are quarantined; without
+  the agent, programs you build in a tab would be stopped by Gatekeeper. A tmux
+  server that was already running keeps working until it exits (for example
+  after `tmux kill-server`), then the agent takes over.
 - Both sides check a protocol version, so a mismatched host is caught and
   explained instead of misbehaving.
 
