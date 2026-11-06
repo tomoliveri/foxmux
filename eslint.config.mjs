@@ -33,6 +33,8 @@ export default [
         loadSettings: "readonly",
         terminalFontFamily: "readonly",
         openLink: "readonly",
+        isColourReply: "readonly",
+        STALE_REPLY_MS: "readonly",
       },
     },
   },

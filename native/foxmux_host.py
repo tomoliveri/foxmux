@@ -216,7 +216,15 @@ def attach(tmux, env, session, request, reader):
                     output = b""
                 if not output:
                     break
-                send({"type": "output", "data": base64.b64encode(output).decode()})
+                send(
+                    {
+                        "type": "output",
+                        "data": base64.b64encode(output).decode(),
+                        # Lets the tab tell how long the output waited to be
+                        # parsed (see extension/replies.js).
+                        "sent": int(time.time() * 1000),
+                    }
+                )
             if reader.fd in readable:
                 reader.fill()
     finally:

@@ -44,6 +44,17 @@ async function main() {
   let running = false;
   let hostExplained = false; // the host already said why it is stopping
   let session = "";
+  // When the host sent each output chunk that xterm.js hasn't parsed yet.
+  const sentTimes = [];
+
+  function isStaleReply(data) {
+    const sent = sentTimes[0];
+    return (
+      sent !== undefined &&
+      Date.now() - sent > STALE_REPLY_MS &&
+      isColourReply(data)
+    );
+  }
 
   function show(messageName, color, args = []) {
     const text = browser.i18n.getMessage(messageName, args) || messageName;
@@ -77,7 +88,10 @@ async function main() {
         setTitle();
         break;
       case "output":
-        term.write(base64ToBytes(message.data));
+        // xterm.js parses writes in order and answers queries while parsing,
+        // so the head of this queue is the chunk any reply belongs to.
+        sentTimes.push(message.sent);
+        term.write(base64ToBytes(message.data), () => sentTimes.shift());
         break;
       case "notice":
         show(message.code, COLOR_WARNING, message.args);
@@ -120,6 +134,9 @@ async function main() {
   }
 
   term.onData(data => {
+    if (isStaleReply(data)) {
+      return;
+    }
     if (running) {
       sendToTmux({ type: "input", data });
     } else if (data === "\r") {

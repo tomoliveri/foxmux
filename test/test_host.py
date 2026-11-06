@@ -281,6 +281,19 @@ class HostProcessTests(unittest.TestCase):
             screen = self.screen(self.wait_for_text(process, "42x"))
             self.assertIn(directory, screen)
 
+    def test_output_carries_the_time_it_was_sent(self):
+        before = time.time() * 1000
+        process = self.start_host()
+        self.ready(process)
+        self.send(process, {"type": "input", "data": "echo $((6*7))x\r"})
+        outputs = [
+            m for m in self.wait_for_text(process, "42x") if m["type"] == "output"
+        ]
+        self.assertTrue(outputs)
+        for message in outputs:
+            self.assertGreaterEqual(message["sent"], before - 1000)
+            self.assertLessEqual(message["sent"], time.time() * 1000 + 1000)
+
     def test_missing_start_directory_falls_back_with_a_notice(self):
         process = self.start_host()
         _, messages = self.ready(process, cwd="/no/such/dir")

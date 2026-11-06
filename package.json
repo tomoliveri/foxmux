@@ -9,7 +9,7 @@
     "vendor": "node scripts/vendor.js",
     "lint": "prettier --check . && eslint . && web-ext lint --source-dir extension --self-hosted",
     "build": "sh scripts/build.sh",
-    "test": "node --test test/links.test.js && python3 -m unittest discover -s test",
+    "test": "node --test test/links.test.js test/replies.test.js && python3 -m unittest discover -s test",
     "test:e2e": "node --test test/e2e.test.js"
   },
   "dependencies": {

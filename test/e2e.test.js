@@ -179,6 +179,33 @@ test("runs commands typed into the tab", async () => {
   );
 });
 
+test("answers colour queries from programs that wait for them", async () => {
+  await openTerminal();
+  // Palette entry 38 is #00afd7; tmux passes the query on to the tab.
+  await run(
+    "printf '\\e]4;38;?\\e\\\\'; read -rs -t 5 -d '\\' r; echo \"got-${r#*rgb:}\" | tr -d '\\033'"
+  );
+  await waitFor("colour reply", async () =>
+    (await screenLines()).some(l => /got-0+\/(af)+\/(d7)+/.test(l))
+  );
+});
+
+test("drops colour replies the asking program stopped waiting for", async () => {
+  await openTerminal();
+  await run("sleep 1; printf '\\e]4;38;?\\e\\\\'");
+  // Keep the page busy, as Firefox's throttling of background tabs does, so
+  // the query is parsed long after it was sent and nobody reads the reply.
+  await driver.executeScript(
+    "const end = Date.now() + 3000; while (Date.now() < end) {}"
+  );
+  await run("echo done-$((1 + 1))");
+  await waitFor("echo output", async () =>
+    (await screenLines()).some(l => l.trim() === "done-2")
+  );
+  const lines = await screenLines();
+  assert.ok(!lines.some(l => /afaf|d7d7/.test(l)), lines.join("\n"));
+});
+
 test("starts in the directory chosen in preferences", async () => {
   const dir = mkdtempSync(join(homedir(), ".foxmux-e2e-"));
   try {
